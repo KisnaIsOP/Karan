@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karan AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        
+        .chat-container {
+            height: calc(100vh - 180px);
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f1f1f1;
+        }
+        
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .chat-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+        
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .message {
+            max-width: 85%;
+            margin: 1rem 0;
+            padding: 1rem;
+            border-radius: 1rem;
+            line-height: 1.5;
+        }
+
+        .user-message {
+            background: #e9ecef;
+            margin-left: auto;
+            color: #000;
+        }
+
+        .ai-message {
+            background: #fff;
+            margin-right: auto;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 1rem;
+            background: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin: 1rem 0;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            margin: 0 2px;
+            background-color: #6c757d;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        .input-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            padding: 1rem;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .textarea-wrapper {
+            position: relative;
+            max-width: 768px;
+            margin: 0 auto;
+        }
+
+        #user-input {
+            resize: none;
+            min-height: 24px;
+            max-height: 200px;
+            padding-right: 100px;
+            border: 1px solid #e0e0e0;
+            transition: border-color 0.3s ease;
+        }
+
+        #user-input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+        }
+
+        #send-button {
+            position: absolute;
+            right: 8px;
+            bottom: 8px;
+            transition: all 0.3s ease;
+        }
+
+        #send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .char-counter {
+            position: absolute;
+            right: 8px;
+            top: 8px;
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+
+        code {
+            background: #f8f9fa;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+
+        pre {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="max-w-4xl mx-auto px-4">
+        <header class="py-4 text-center">
+            <h1 class="text-2xl font-bold text-gray-800">Karan AI</h1>
+            <p class="text-sm text-gray-600">Your Personal AI Assistant</p>
+        </header>
+
+        <main class="chat-container pb-24">
+            <div id="chat-messages"></div>
+            <div id="typing-indicator" class="hidden typing-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </main>
+
+        <div class="input-container">
+            <div class="textarea-wrapper">
+                <textarea 
+                    id="user-input" 
+                    class="w-full p-3 rounded-lg focus:outline-none"
+                    placeholder="Message Karan AI..."
+                    rows="1"
+                    maxlength="500"
+                ></textarea>
+                <div class="char-counter">
+                    <span id="char-counter">0</span>/500
+                </div>
+                <button 
+                    id="send-button"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                    disabled
+                >
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const chatMessages = document.getElementById('chat-messages');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const charCounter = document.getElementById('char-counter');
+
+        function appendMessage(message, isUser = true) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+            
+            // Parse markdown and sanitize HTML
+            const sanitizedMessage = DOMPurify.sanitize(marked.parse(message));
+            messageDiv.innerHTML = sanitizedMessage;
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function updateTextareaHeight() {
+            userInput.style.height = 'auto';
+            userInput.style.height = Math.min(userInput.scrollHeight, 200) + 'px';
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            // Clear input and reset
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            updateCharCounter(userInput);
+            sendButton.disabled = true;
+
+            // Append user message
+            appendMessage(message, true);
+
+            // Show typing indicator
+            typingIndicator.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message }),
+                });
+
+                const data = await response.json();
+
+                // Hide typing indicator
+                typingIndicator.classList.add('hidden');
+
+                if (data.error) {
+                    appendMessage(`Error: ${data.error}`, false);
+                } else {
+                    appendMessage(data.response, false);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                typingIndicator.classList.add('hidden');
+                appendMessage('Sorry, there was an error processing your message.', false);
+            }
+        }
+
+        function updateCharCounter(textarea) {
+            const currentLength = textarea.value.length;
+            charCounter.textContent = currentLength;
+            sendButton.disabled = currentLength === 0;
+        }
+
+        userInput.addEventListener('input', () => {
+            updateCharCounter(userInput);
+            updateTextareaHeight();
+        });
+
+        sendButton.addEventListener('click', sendMessage);
+
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!sendButton.disabled) {
+                    sendMessage();
+                }
+            }
+        });
+
+        // Initial welcome message
+        appendMessage('Hello! I am Karan, your personal AI assistant. How can I help you today?', false);
+    </script>
+</body>
+</html>
